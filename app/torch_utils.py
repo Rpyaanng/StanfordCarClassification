@@ -5,57 +5,32 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import torch.nn as nn
 from PIL import Image
+import torchvision.models as models
 
-num_classes = 4
+num_classes = 196
 
-class CNN(nn.Module):
-    def __init__(self, number_of_classes):
-        super(CNN, self).__init__()
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, stride=2),
-            nn.BatchNorm2d(16),# batch norm on input channels
-            nn.LeakyReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(in_channels=16, out_channels=32,
-                      kernel_size=3, stride=2), # 32 after maxpooling
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(in_channels=32, out_channels=64,
-                      kernel_size=3, stride=2),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-        )
-
-        # RUNNING DENSE LAYERS ON THE NETWORK - 
-        self.dense_layers = nn.Sequential(
-            nn.Dropout(0.2),
-            nn.Linear(64 * 3 * 3, 128),
-            nn.ReLU(),
-            nn.Dropout(0.2), # randomly dropping 20% neurons
-            nn.Linear(128, number_of_classes),
-        )
-
-    def forward(self, x):
-        x = self.conv_layers(x)
-        x = x.view(x.size(0), -1)
-        x = self.dense_layers(x)
-        
-        return x # x is the final tensor from all the convolutions
-
-model = CNN(num_classes) # initializing the model
-PATH = "app/model.pth"
-model.load_state_dict(torch.load(PATH))
+model = models.resnet34(weights=True)
+num_ftrs = model.fc.in_features
+model.fc = nn.Linear(num_ftrs, num_classes)
+PATH = "app/car_weights.pth"
+model.load_state_dict(torch.load(PATH , map_location=torch.device('cpu')))
 model.eval()
 
 def transform_image(image_bytes):
-    transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Resize((256, 256)),
-        ]
-    )
+    transform = transforms.Compose([
+        transforms.Resize((400, 400)),
+        transforms.RandomResizedCrop(224),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+
+    val_transforms = transforms.Compose([
+        transforms.Resize((400, 400)),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
     image = Image.open(io.BytesIO(image_bytes))
     return transform(image).unsqueeze(0)
 
